@@ -21,11 +21,30 @@ const rating = document.querySelector(".rating");
 const minPrice = document.querySelector(".price");
 const category = document.querySelector(".category");
 const inputSearch = document.querySelector(".input-search");
+const modalBody = document.querySelector(".modal-body");
+const modalPrice = document.querySelector(".modal-pricetag");
+const buttonClearCart = document.querySelector(".clear-cart")
 
 let login = localStorage.getItem("userName");
 
+const cart = []; 
 
-const getData = async function(url) {
+const loadCart = () => {
+  if(localStorage.getItem(login)) {
+      cart.push(...JSON.parse(localStorage.getItem(login)));
+  }
+};
+
+const saveCart = () => {
+  localStorage.setItem(login, JSON.stringify(cart));
+};
+
+const valid = (str) => {
+  const nameReg = /^[a-zA-Z][a-zA-Z0-9-_\.]{1,20}$/;
+  return nameReg.test(str);
+};
+
+const getData = async (url) => {
   const response = await fetch(url);
   if(!response.ok) {
     throw new Error(`Ошибка по адресу ${url}, 
@@ -34,47 +53,54 @@ const getData = async function(url) {
   return await response.json();
 };
 
-const toggleModal = function() {
+const toggleModal = () => {
   modal.classList.toggle("is-open");
-}
+};
 
-const toggleModalAuth = function() {
+const toggleModalAuth = () => {
   modalAuth.classList.toggle("is-open");
   loginInput.classList.remove('input-error');
-}
+};
 
-function returnMain() {
+const returnMain = () => {
   containerPromo.classList.remove("hide");
   restaurants.classList.remove("hide");
   menu.classList.add("hide");  
-}
+};
 
-function isAutorized() {
-  function logOut(e) {
+const isAutorized = () => {
+  const logOut = (e) => {
     login = null;
+    cart.length = 0;
     btnAuth.style.display = "";
     userName.style.display = "";
-    btnLogOut.style.display = "";
+    btnLogOut.style.display = "";    
+    cartButton.style.display = "";
     btnLogOut.removeEventListener("click", logOut);    
     localStorage.removeItem("userName");
     checkAuth();
     returnMain();
-  }
+  };
 
   userName.textContent = login;
 
   btnAuth.style.display = "none";
   userName.style.display = "inline";
-  btnLogOut.style.display = "block";
-
+  btnLogOut.style.display = "flex";
+  cartButton.style.display = "flex";
   btnLogOut.addEventListener("click", logOut);
-}
+  loadCart();
+};
 
-function isNotAutorized() {
-  function logIn(e) {    
+const maskInput = (string) => {
+  return !!string.trim();
+};
+
+const isNotAutorized = () => {
+  const logIn = (e) => {    
     e.preventDefault();
     login = loginInput.value;     
-    if(login) {
+    if(valid(login)) {
       localStorage.setItem("userName", login);
       toggleModalAuth();
       loginInput.classList.remove('input-error');
@@ -87,22 +113,16 @@ function isNotAutorized() {
       loginInput.classList.add('input-error');
     }
 
-  }
+  };
 
   btnAuth.addEventListener("click", toggleModalAuth);
   closeAuth.addEventListener("click", toggleModalAuth);
   logInForm.addEventListener("submit", logIn);
-}
+};
 
-function checkAuth() {
-  if(login) {
-    isAutorized();
-  } else {
-    isNotAutorized();
-  }
-}
+const checkAuth = () => login ? isAutorized() : isNotAutorized();
 
-function createCardRestaurant(restaurant) {
+const createCardRestaurant = (restaurant) => {
 
   const { image, kitchen, price, name, stars, products, time_of_delivery: timeOfDelivery } = restaurant;
 
@@ -125,15 +145,15 @@ function createCardRestaurant(restaurant) {
   </a>
 `;
   cardsRestaurants.insertAdjacentHTML("afterbegin", card);
-}
+};
 
-function createCardGood({ description, image, name, price }) {
+const createCardGood = ({ description, image, name, price, id }) => {
 
   const card = document.createElement("div");
   card.className = "card"; 
-
+  //card.id = id;
   card.insertAdjacentHTML("beforeend", `
-    <img src="${image}" alt="image" class="card-image"/>
+    <img src="${image}" alt="${name}" class="card-image" />
     <div class="card-text">
       <div class="card-heading">
         <h3 class="card-title card-title-reg">${name}</h3>
@@ -143,20 +163,20 @@ function createCardGood({ description, image, name, price }) {
         </div>
       </div>
       <div class="card-buttons">
-        <button class="button button-primary button-add-cart">
+        <button class="button button-primary button-add-cart" id="${id}">
           <span class="button-card-text">В корзину</span>
           <span class="button-cart-svg"></span>
         </button>
-        <strong class="card-price-bold"> ${price} ₽</strong>
+        <strong class="card-price card-price-bold"> ${price} ₽</strong>
       </div>
     </div>
   `);
 
   cardsMenu.insertAdjacentElement("beforeend", card);
 
-}
+};
 
-function openGoods(e) {
+const openGoods = (e) => {
   const target = e.target;
   const restaurant = target.closest(".card-restaurant");
 
@@ -172,28 +192,109 @@ function openGoods(e) {
       rating.textContent = stars;
       minPrice.textContent = `От ${price} ₽`;
       category.textContent = kitchen;  
-      getData(`./db/${restaurant.dataset.products}`).then(function(data){
+      getData(`./db/${restaurant.dataset.products}`)
+      .then((data) => {
         data.forEach(createCardGood);
       });
     } else {
         toggleModalAuth()
     }
   }
-}
+};
+
+const addToCart = (e) => {
+  const target = e.target;
+  const buttonAddToCart = target.closest(".button-add-cart");
+
+  if(buttonAddToCart) {
+    const card = target.closest(".card");
+    const title = card.querySelector(".card-title").textContent;
+    const cost = card.querySelector(".card-price").textContent;
+    const id = buttonAddToCart.id;
+    const food = cart.find((item) => {
+      return item.id === id;
+    })
+
+    if(food) {
+      food.count += 1;
+    } else {
+      cart.push({
+        id,
+        title,
+        cost,    
+        count: 1  
+      })
+    }
+  }
+  saveCart();
+};
+
+
+const renderCart = () => {
+  modalBody.textContent = ""; 
+  cart.forEach(function({ id, title, cost, count }) {
+    const itemCart = `
+      <div class="food-row">
+        <span class="food-name">${title}</span>
+        <strong class="food-price">${cost}</strong>
+        <div class="food-counter">
+          <button class="counter-button counter-minus" data-id=${id}>-</button>
+          <span class="counter">${count}</span>
+          <button class="counter-button counter-plus" data-id=${id}>+</button>
+        </div>
+      </div>   
+    `;
+    modalBody.insertAdjacentHTML("beforeend", itemCart);
+  });
+  const totalPrice = cart.reduce(function(result, item) {
+    return result + (parseFloat(item.cost) * item.count);
+  }, 0);
+
+  modalPrice.textContent = totalPrice + " ₽";
+};
+
+const changeCount = (e) => {
+  const target = e.target;
+  if(target.classList.contains("counter-button")) {
+    const food = cart.find(function(item) {
+      return item.id === target.dataset.id;
+    });
+    if(target.classList.contains("counter-minus")) {
+      food.count--;
+      if (food.count === 0) {
+        cart.splice(cart.indexOf(food), 1);
+      }
+    }
+
+    if(target.classList.contains("counter-plus")) {
+      food.count++;
+    }    
+    renderCart();
+  }
+  saveCart();
+};
 
 function init() {
-  getData('./db/partners.json').then(function(data){
+  getData('./db/partners.json').then((data) => {
     data.forEach(createCardRestaurant);    
   });
   
   cardsRestaurants.addEventListener("click", openGoods);
   
-  logo.addEventListener("click", returnMain);
-  
+  cartButton.addEventListener("click", renderCart);
   cartButton.addEventListener("click", toggleModal);
+
+  buttonClearCart.addEventListener("click", () => {
+    cart.length = 0;
+    renderCart();
+  })
+
+  modalBody.addEventListener("click", changeCount);
+  cardsMenu.addEventListener("click", addToCart);
   close.addEventListener("click", toggleModal);
-  
-  inputSearch.addEventListener('keydown', function(e) {
+  logo.addEventListener("click", returnMain);
+
+  inputSearch.addEventListener('keydown', (e) => {
     if(e.keyCode === 13) {
       const target = e.target;
       const value = target.value.toLowerCase().trim();
@@ -206,31 +307,32 @@ function init() {
         return;
       }
       const goods = [];
-      getData('./db/partners.json').then(function(data){
-        const products = data.map(function(item){
-          return item.products;
-        });    
-        products.forEach(function(product){
-          getData('./db/' + product).then(function(data){
-            goods.push(...data);
-            const searchGoods = goods.filter(function(item){
-              return item.name.toLowerCase().includes(value);
+      getData('./db/partners.json')
+        .then((data) => {
+          const products = data.map((item) => {
+            return item.products;
+          });    
+          products.forEach((product) => {
+            getData('./db/' + product).then((data) => {
+              goods.push(...data);
+              const searchGoods = goods.filter((item) => {
+                return item.name.toLowerCase().includes(value);
+              })
+              cardsMenu.textContent = "";
+              containerPromo.classList.add("hide");
+              restaurants.classList.add("hide");  
+              menu.classList.remove("hide");   
+              restaurantsTitle.textContent = "Результат поиска";
+              rating.textContent = "";
+              minPrice.textContent = "";
+              category.textContent = "";
+              return searchGoods;
+                      
             })
-            cardsMenu.textContent = "";
-            containerPromo.classList.add("hide");
-            restaurants.classList.add("hide");  
-            menu.classList.remove("hide");   
-            restaurantsTitle.textContent = "Результат поиска";
-            rating.textContent = "";
-            minPrice.textContent = "";
-            category.textContent = "";
-            return searchGoods;
-                    
+            .then((data) => {
+              data.forEach(createCardGood);   
+            })
           })
-          .then(function(data){
-            data.forEach(createCardGood);   
-          })
-        })
       });     
     }
   })
